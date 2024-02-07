@@ -14,9 +14,9 @@ import Prefire
 {% endif %}
 
 class PreviewTests: XCTestCase {
-    private let deviceConfig: ViewImageConfig = .iPhoneX
     private let simulatorDevice = "{{ argument.simulatorDevice|default:"iPhone15,2" }}"
     private let requiredOSVersion = {{ argument.simulatorOSVersion|default:"16" }}
+    private let snapshotDevices = "{{ argument.snapshotDevices }}"
     {% if argument.file %}
 
     private var file: StaticString { .init(stringLiteral: "{{ argument.file }}") }
@@ -40,41 +40,39 @@ class PreviewTests: XCTestCase {
     // MARK: Private
 
     private func assertSnapshots(matching preview: _Preview, testName: String = #function) {
-        let isScreen = preview.layout == .device
-        let device = preview.device?.snapshotDevice() ?? deviceConfig
-        var delay: TimeInterval = 0
-        var precision: Float = 1
+        for deviceName in snapshotDevices.split(separator: "|") {
+            let isScreen = preview.layout == .device
+            var delay: TimeInterval = 0
+            var precision: Float = 1
 
-        let view = preview.content
-            .onPreferenceChange(DelayPreferenceKey.self) { delay = $0 }
-            .onPreferenceChange(PrecisionPreferenceKey.self) { precision = $0 }
+            let view = preview.content
+                .onPreferenceChange(DelayPreferenceKey.self) { delay = $0 }
+                .onPreferenceChange(PrecisionPreferenceKey.self) { precision = $0 }
+                
+            // We want to be able to run these on any device so:
+            
+            // Ignore specific device display scale
+            let traits = UITraitCollection(displayScale: 1.0)
+            
+            var device = snapshotDevice(String(deviceName))
+            // Ignore specific device safe area
+            device.safeArea = .zero
 
-        let matchingView = isScreen ? AnyView(view) : AnyView(view
-            .frame(width: device.size?.width)
-            .fixedSize(horizontal: false, vertical: true)
-        )
-
-        assertSnapshot(
-            matching: matchingView,
-            as: .prefireImage(precision: { precision }, duration: { delay }, layout: isScreen ? .device(config: device) : .sizeThatFits),
-            named: preview.displayName{% if argument.file %},
-            file: file{% endif %},
-            testName: testName
-        )
-
-        #if canImport(AccessibilitySnapshot)
-            let vc = UIHostingController(rootView: matchingView)
-            vc.view.frame = UIScreen.main.bounds
-            assertSnapshot(
-                matching: vc,
-                as: .wait(for: delay, on: .accessibilityImage(showActivationPoints: .always)),
-                named: preview.displayName.map { $0 + ".accessibility" }{% if argument.file %},
-                file: file{% endif %},
-                testName: testName
+            let matchingView = isScreen ? AnyView(view) : AnyView(view
+                .frame(width: device.size?.width)
+                .fixedSize(horizontal: false, vertical: true)
             )
-        #endif
+        
+            assertSnapshot(
+                matching: matchingView,
+                as: .prefireImage(precision: { precision }, duration: { delay }, layout: isScreen ? .device(config: device) : .sizeThatFits, traits: traits),
+                named: preview.displayName{% if argument.file %},
+                file: file{% endif %},
+                testName: testName + deviceName
+            )
+        }
     }
-
+    
     /// Check environments to avoid problems with snapshots on different devices or OS.
     private func checkEnvironments() {
         let deviceModel = ProcessInfo().environment["SIMULATOR_MODEL_IDENTIFIER"]
@@ -87,14 +85,10 @@ class PreviewTests: XCTestCase {
             fatalError("Switch to iOS \(requiredOSVersion) for these tests.")
         }
     }
-}
-
-// MARK: - SnapshotTesting + Extensions
-
-private extension PreviewDevice {
-    func snapshotDevice() -> ViewImageConfig? {
-        switch rawValue {
-        case "iPhone 14", "iPhone 13", "iPhone 12", "iPhone 11", "iPhone 10":
+    
+    func snapshotDevice(_ string: String) -> ViewImageConfig {
+        switch string {
+        case "iPhone 15", "iPhone 14", "iPhone 13", "iPhone 12", "iPhone 11", "iPhone 10":
             return .iPhoneX
         case "iPhone 6", "iPhone 6s", "iPhone 7", "iPhone 8":
             return .iPhone8
@@ -102,10 +96,21 @@ private extension PreviewDevice {
             return .iPhone8Plus
         case "iPhone SE (1st generation)", "iPhone SE (2nd generation)":
             return .iPhoneSe
-        default: return nil
+        case "iPad":
+            return .iPad10_2
+        case "iPad Mini":
+            return .iPadMini
+        case "iPad Pro 11":
+            return .iPadPro11
+        case "iPad Pro 12.9":
+            return .iPadPro12_9
+        default:
+            return .iPhoneX
         }
     }
 }
+
+// MARK: - SnapshotTesting + Extensions
 
 private extension Snapshotting where Value: SwiftUI.View, Format == UIImage {
     static func prefireImage(

@@ -75,8 +75,8 @@ extension PrefireTestsPlugin: XcodeBuildToolPlugin {
 
 // MARK: - Extensions
 
-private let defaultSimulatorDevice = "iPhone15,2"
-private let defaultOSVersion = "16"
+private let defaultSimulatorDevice = "iPhone15,4"
+private let defaultOSVersion = "17"
 
 extension Command {
     static func prefireCommand(
@@ -104,6 +104,8 @@ extension Command {
             "simulatorDevice=\(configuration?.simulatorDevice ?? defaultSimulatorDevice)",
             "--args",
             "simulatorOSVersion=\(configuration?.requiredOSVersion ?? defaultOSVersion)",
+            "--args",
+            "snapshotDevices=\(configuration?.snapshotDevices?.joined(separator: "|") ?? defaultSimulatorDevice)"
         ]
 
         if configuration?.testFilePath == nil {
@@ -121,6 +123,7 @@ extension Command {
         The Snapshot resources will be placed in the path: \(testTargetPath)
         Device for tests: \(configuration?.simulatorDevice ?? defaultSimulatorDevice)
         OS version for tests: \(configuration?.requiredOSVersion ?? defaultOSVersion)
+        Snapshot devices: \(configuration?.snapshotDevices?.joined(separator: "|") ?? defaultSimulatorDevice)
         """
         )
 

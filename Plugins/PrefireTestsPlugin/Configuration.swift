@@ -7,6 +7,7 @@ struct Configuration {
     let templateFilePath: String?
     let simulatorDevice: String?
     let requiredOSVersion: String?
+    let snapshotDevices: [String]?
 }
 
 // MARK: - Initialization
@@ -18,6 +19,7 @@ extension Configuration {
         case template_file_path
         case simulator_device
         case required_os
+        case snapshot_devices
     }
 
     private static let fileName = ".prefire.yml"
@@ -37,15 +39,19 @@ extension Configuration {
 
         guard FileManager.default.fileExists(atPath: configUrl.path),
               let configDataString = try? String(contentsOf: configUrl, encoding: .utf8) else { return nil }
-
+        
         Diagnostics.remark("🟢 Successfully found and will use the file '.prefire.yml' on the path: \(configUrl.path)")
+        
+        let snapshotDevicesString = getFrom(configDataString: configDataString, key: .snapshot_devices)
+        let snapshotDevices = snapshotDevicesString?.extractValuesFromArray() ?? (snapshotDevicesString == nil ? [] : [snapshotDevicesString!])
 
         return Configuration(
             targetName: getFrom(configDataString: configDataString, key: .target),
             testFilePath: getFrom(configDataString: configDataString, key: .test_file_path),
             templateFilePath: getFrom(configDataString: configDataString, key: .template_file_path),
             simulatorDevice: getFrom(configDataString: configDataString, key: .simulator_device),
-            requiredOSVersion: getFrom(configDataString: configDataString, key: .required_os)
+            requiredOSVersion: getFrom(configDataString: configDataString, key: .required_os),
+            snapshotDevices: snapshotDevices
         )
     }
 
@@ -63,6 +69,22 @@ private extension String {
         let matches  = regex.matches(in: self, options: [], range: NSMakeRange(0, self.count))
         return matches.map { match in
             String(self[Range(match.range, in: self)!])
+        }
+    }
+    
+    func extractValuesFromArray() -> [String] {
+        do {
+            let regex = try NSRegularExpression(pattern: "\"(.*?)\"", options: [])
+            let matches = regex.matches(in: self, options: [], range: NSRange(location: 0, length: self.utf16.count))
+            
+            let values = matches.map {
+                (self as NSString).substring(with: $0.range(at: 1))
+            }
+            
+            return values
+        } catch {
+            print("Error creating regex: \(error)")
+            return []
         }
     }
 }
